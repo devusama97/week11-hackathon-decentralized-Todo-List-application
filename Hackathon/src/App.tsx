@@ -77,13 +77,16 @@ const App: React.FC = () => {
     const { isLoading: isCreateConfirming, isSuccess: isCreateSuccess } = useWaitForTransactionReceipt({ hash: createHash })
 
     // Contract Write: Toggle Task
-    const { writeContract: toggleTask, data: toggleHash } = useWriteContract()
+    const { writeContract: toggleTask, data: toggleHash, isPending: isTogglePending } = useWriteContract()
+    const { isLoading: isToggleConfirming, isSuccess: isToggleSuccess } = useWaitForTransactionReceipt({ hash: toggleHash })
 
     // Contract Write: Delete Task
-    const { writeContract: deleteTask, data: deleteHash } = useWriteContract()
+    const { writeContract: deleteTask, data: deleteHash, isPending: isDeletePending } = useWriteContract()
+    const { isLoading: isDeleteConfirming, isSuccess: isDeleteSuccess } = useWaitForTransactionReceipt({ hash: deleteHash })
 
     // Contract Write: Update Task
-    const { writeContract: updateTask, data: updateHash } = useWriteContract()
+    const { writeContract: updateTask, data: updateHash, isPending: isUpdatePending } = useWriteContract()
+    const { isLoading: isUpdateConfirming, isSuccess: isUpdateSuccess } = useWaitForTransactionReceipt({ hash: updateHash })
 
     const handleCreateTask = () => {
         if (!content) return
@@ -126,11 +129,11 @@ const App: React.FC = () => {
 
     // Refetch after transactions
     React.useEffect(() => {
-        if (isCreateSuccess) {
+        if (isCreateSuccess || isToggleSuccess || isDeleteSuccess || isUpdateSuccess) {
             refetch()
-            setContent('')
+            if (isCreateSuccess) setContent('')
         }
-    }, [isCreateSuccess, refetch])
+    }, [isCreateSuccess, isToggleSuccess, isDeleteSuccess, isUpdateSuccess, refetch])
 
     const getPriorityColor = (p: number) => {
         switch (p) {
@@ -237,9 +240,10 @@ const App: React.FC = () => {
                         Please connect your wallet to see your tasks
                     </Typography>
                 </Box>
-            ) : isTasksLoading ? (
+            ) : (isTasksLoading && !tasks) ? (
                 <Box textAlign="center" py={10}>
                     <CircularProgress />
+                    <Typography mt={2} color="text.secondary">Fetching tasks...</Typography>
                 </Box>
             ) : (
                 <Stack spacing={2}>
