@@ -1,0 +1,290 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/**
+ * @title TodoList
+ * @dev A decentralized Todo List application with full CRUD operations
+ * @author Blockchain Hackathon Participant
+ */
+contract TodoList {
+    // Task structure
+    struct Task {
+        uint256 id;
+        string content;
+        bool isCompleted;
+        uint256 createdAt;
+        uint256 updatedAt;
+        uint8 priority; // 1: Low, 2: Medium, 3: High
+        string category;
+    }
+
+    // State variables
+    mapping(address => Task[]) private userTasks;
+    mapping(address => uint256) private userTaskCount;
+
+    // Events
+    event TaskCreated(
+        address indexed user,
+        uint256 indexed taskId,
+        string content,
+        uint256 timestamp
+    );
+
+    event TaskToggled(
+        address indexed user,
+        uint256 indexed taskId,
+        bool isCompleted,
+        uint256 timestamp
+    );
+
+    event TaskDeleted(
+        address indexed user,
+        uint256 indexed taskId,
+        uint256 timestamp
+    );
+
+    event TaskUpdated(
+        address indexed user,
+        uint256 indexed taskId,
+        string newContent,
+        uint256 timestamp
+    );
+
+    // Modifiers
+    modifier taskExists(uint256 _taskId) {
+        require(_taskId < userTasks[msg.sender].length, "Task does not exist");
+        _;
+    }
+
+    modifier validContent(string memory _content) {
+        require(bytes(_content).length > 0, "Task content cannot be empty");
+        require(bytes(_content).length <= 500, "Task content too long (max 500 characters)");
+        _;
+    }
+
+    /**
+     * @dev Create a new task
+     * @param _content The task description
+     */
+    function createTask(string memory _content)
+        external
+        validContent(_content)
+    {
+        _createTaskWithDetails(_content, 2, ""); // Default: Medium priority, no category
+    }
+
+    /**
+     * @dev Create a new task with priority and category
+     * @param _content The task description
+     * @param _priority Priority level (1-3)
+     * @param _category Task category
+     */
+    function createTaskWithDetails(
+        string memory _content,
+        uint8 _priority,
+        string memory _category
+    ) external validContent(_content) {
+        require(_priority >= 1 && _priority <= 3, "Priority must be between 1-3");
+        _createTaskWithDetails(_content, _priority, _category);
+    }
+
+    /**
+     * @dev Internal function to create a task
+     */
+    function _createTaskWithDetails(
+        string memory _content,
+        uint8 _priority,
+        string memory _category
+    ) private {
+        uint256 taskId = userTaskCount[msg.sender];
+
+        Task memory newTask = Task({
+            id: taskId,
+            content: _content,
+            isCompleted: false,
+            createdAt: block.timestamp,
+            updatedAt: block.timestamp,
+            priority: _priority,
+            category: _category
+        });
+
+        userTasks[msg.sender].push(newTask);
+        userTaskCount[msg.sender]++;
+
+        emit TaskCreated(msg.sender, taskId, _content, block.timestamp);
+    }
+
+    /**
+     * @dev Toggle task completion status
+     * @param _taskId The task ID to toggle
+     */
+    function toggleTask(uint256 _taskId)
+        external
+        taskExists(_taskId)
+    {
+        Task storage task = userTasks[msg.sender][_taskId];
+        task.isCompleted = !task.isCompleted;
+        task.updatedAt = block.timestamp;
+
+        emit TaskToggled(msg.sender, _taskId, task.isCompleted, block.timestamp);
+    }
+
+    /**
+     * @dev Update task content
+     * @param _taskId The task ID to update
+     * @param _newContent The new task description
+     */
+    function updateTask(uint256 _taskId, string memory _newContent)
+        external
+        taskExists(_taskId)
+        validContent(_newContent)
+    {
+        Task storage task = userTasks[msg.sender][_taskId];
+        task.content = _newContent;
+        task.updatedAt = block.timestamp;
+
+        emit TaskUpdated(msg.sender, _taskId, _newContent, block.timestamp);
+    }
+
+    /**
+     * @dev Delete a task
+     * @param _taskId The task ID to delete
+     */
+    function deleteTask(uint256 _taskId)
+        external
+        taskExists(_taskId)
+    {
+        Task[] storage tasks = userTasks[msg.sender];
+
+        // Move the last task to the deleted position
+        tasks[_taskId] = tasks[tasks.length - 1];
+        tasks[_taskId].id = _taskId; // Update the ID
+
+        // Remove the last element
+        tasks.pop();
+
+        emit TaskDeleted(msg.sender, _taskId, block.timestamp);
+    }
+
+    /**
+     * @dev Get all tasks for the caller
+     * @return Task[] Array of all tasks
+     */
+    function getAllTasks() external view returns (Task[] memory) {
+        return userTasks[msg.sender];
+    }
+
+    /**
+     * @dev Get a specific task by ID
+     * @param _taskId The task ID to retrieve
+     * @return Task The task details
+     */
+    function getTask(uint256 _taskId)
+        external
+        view
+        taskExists(_taskId)
+        returns (Task memory)
+    {
+        return userTasks[msg.sender][_taskId];
+    }
+
+    /**
+     * @dev Get total task count for the caller
+     * @return uint256 Total number of tasks
+     */
+    function getTaskCount() external view returns (uint256) {
+        return userTasks[msg.sender].length;
+    }
+
+    /**
+     * @dev Get completed tasks
+     * @return Task[] Array of completed tasks
+     */
+    function getCompletedTasks() external view returns (Task[] memory) {
+        Task[] memory allTasks = userTasks[msg.sender];
+        uint256 completedCount = 0;
+
+        // Count completed tasks
+        for (uint256 i = 0; i < allTasks.length; i++) {
+            if (allTasks[i].isCompleted) {
+                completedCount++;
+            }
+        }
+
+        // Create array of completed tasks
+        Task[] memory completedTasks = new Task[](completedCount);
+        uint256 currentIndex = 0;
+
+        for (uint256 i = 0; i < allTasks.length; i++) {
+            if (allTasks[i].isCompleted) {
+                completedTasks[currentIndex] = allTasks[i];
+                currentIndex++;
+            }
+        }
+
+        return completedTasks;
+    }
+
+    /**
+     * @dev Get pending (incomplete) tasks
+     * @return Task[] Array of pending tasks
+     */
+    function getPendingTasks() external view returns (Task[] memory) {
+        Task[] memory allTasks = userTasks[msg.sender];
+        uint256 pendingCount = 0;
+
+        // Count pending tasks
+        for (uint256 i = 0; i < allTasks.length; i++) {
+            if (!allTasks[i].isCompleted) {
+                pendingCount++;
+            }
+        }
+
+        // Create array of pending tasks
+        Task[] memory pendingTasks = new Task[](pendingCount);
+        uint256 currentIndex = 0;
+
+        for (uint256 i = 0; i < allTasks.length; i++) {
+            if (!allTasks[i].isCompleted) {
+                pendingTasks[currentIndex] = allTasks[i];
+                currentIndex++;
+            }
+        }
+
+        return pendingTasks;
+    }
+
+    /**
+     * @dev Get tasks by category
+     * @param _category The category to filter by
+     * @return Task[] Array of tasks in the specified category
+     */
+    function getTasksByCategory(string memory _category)
+        external
+        view
+        returns (Task[] memory)
+    {
+        Task[] memory allTasks = userTasks[msg.sender];
+        uint256 categoryCount = 0;
+
+        // Count tasks in category
+        for (uint256 i = 0; i < allTasks.length; i++) {
+            if (keccak256(bytes(allTasks[i].category)) == keccak256(bytes(_category))) {
+                categoryCount++;
+            }
+        }
+
+        // Create array of category tasks
+        Task[] memory categoryTasks = new Task[](categoryCount);
+        uint256 currentIndex = 0;
+
+        for (uint256 i = 0; i < allTasks.length; i++) {
+            if (keccak256(bytes(allTasks[i].category)) == keccak256(bytes(_category))) {
+                categoryTasks[currentIndex] = allTasks[i];
+                currentIndex++;
+            }
+        }
+
+        return categoryTasks;
+    }
+}
